@@ -1,0 +1,134 @@
+---
+title: "Coursera Pratical Machine Learning Project"
+author: "Daniela Di Michele"
+date: "21/11/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.
+
+In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise.
+
+## Libraries required
+```{r}
+library(caret)
+library(randomForest)
+```
+
+## Data
+Data is downloaded 
+Read in the data and identify the NA
+```{r}
+downloadcsv <- function(url, nastrings) {
+  temp <- tempfile()
+  download.file(url, temp, method = "curl")
+  data <- read.csv(temp, na.strings = nastrings)
+  unlink(temp)
+  return(data)
+}
+
+trainurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+train <- downloadcsv(trainurl, c("", "NA", "#DIV/0!"))
+
+testurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+test <- downloadcsv(testurl, c("", "NA", "#DIV/0!"))
+
+```
+
+
+## Data Preprocessing
+The training data has 19622 observations and 160 features.
+```{r}
+dim(train)
+```
+The distribution of the five measured stances A,B,C,D,E is:
+```{r}
+table((train$classe))
+```
+
+## Preprocessing
+We separate our training data into a training set and a validation set so that we can validate our model.
+```{r}
+set.seed(040571)
+trainset <- createDataPartition(train$classe, p = 0.8, list = FALSE)
+Training <- train[trainset, ]
+Validation <- train[-trainset, ]
+```
+
+## Feature Selection
+Check the near zero variance features 
+Exclude :
+ - drop the near zero varianc
+ - columns with 40% + missing
+ - descriptive columns
+
+```{r}
+nozvcol <- nearZeroVar(Training)
+Training <- Training[,-nozvcol]
+
+cntlength <- sapply(Training, function(x) {
+    sum(!(is.na(x) | x == ""))
+})
+
+null_col <- names(cntlength[cntlength < 0.6 * length(Training$classe)])
+
+desc_col <- c("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", 
+    "cvtd_timestamp", "new_window", "num_window")
+
+exclude_col <- c(desc_col, null_col)
+
+Training <- Training[, !names(Training) %in% exclude_col]
+
+```
+
+## Model Train
+
+I trained a random forest. 
+I chose a random forest model because they tend to be very accurate and the data set was small enough that using a random forest was feasible.
+
+```{r}
+Rforest_Model <- randomForest(as.factor(classe)~ ., data = Training, importance = TRUE, ntrees = 10)
+
+#Model Validation
+p_training <- predict(Rforest_Model, Training)
+
+
+union_1 <- union(p_training,Training$classe)
+train_1 <- table(factor(p_training, union_1), factor(Training$classe, union_1))
+print(confusionMatrix(train_1))
+
+
+```
+The model performs well against training set, but we need to cross validate against the held out set for see there were overfitting.
+
+## Validation set accuracy
+We see the Confusion Matrix and Statistics.
+
+```{r}
+p_validation <- predict(Rforest_Model, Validation)
+
+
+union_2 <- union(p_validation,Validation$classe)
+train_2 <- table(factor(p_validation, union_2), factor(Validation$classe, union_2))
+print(confusionMatrix(train_2))
+
+
+```
+The cross validation accuracy is 99.72% and the out-of-sample error is therefore 0.5% so our model performs rather good.
+
+## Test set Prediction
+
+The prediction of algorithm for the test set is:
+
+```{r}
+ptest <- predict(Rforest_Model, test)
+ptest
+```
+
+
+
